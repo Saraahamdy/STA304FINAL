@@ -1,0 +1,523 @@
+---
+title: "Creating a Predictive Model for COVID Patients"
+author: "Sara Hamdy, 1005295734"
+date: "December 21, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+GitHub Repo Link: https://github.com/Saraahamdy/STA304FINAL.git
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(skimr)
+library(knitr)
+library(formattable)
+library(ggpubr)
+```
+
+## Abstract:
+
+Currently Corona Virus - COVID - is a present issue that society is facing and creating more efficient methods to treat and prioritize patients is necessary. In this report, the process of creating a predictive model to analyze the probability of a COVID patient being alive is explored. To create the model a Multiple Linear Regression model is calculated using closed COVID cases in Toronto, where the data is gathered from Open Data Toronto (Open Data Dataset. (n.d.)). The model is then run through a backwards step-wise regression with Akaike information criterion, AIC, and with Bayesian information criterion, BIC, to optimize the model's performance and lower the AIC. The model run with the lowest AIC is used to predict the outcome of the current 5127 active COVID cases. In the original 37151 closed cases, 4% of cases resulted in deaths, and the model predicts that 1% of patients have less than a 50% chance of surviving. We conclude that the model is performing at an adequate level and can be used to predict the level of care a patient might need, and an increase of data and constant updates of closed COVID cases can further improve results.
+
+
+
+
+## Keywords:
+
+COVID, Observational Study, Multiple Logistic Regression, Predictive Model, Akaike information criterion, Bayesian information criterion
+
+
+
+## Introduction:
+
+COVID entered our world around December 2019, its numbers multiplied at an uncontrollable rate that resulted in many lives being lost. Having 76,013,074 cases worldwide, 52191 in Toronto and 1,681,249 deaths worldwide, 1770 in Toronto, the virus made itself present and demanded the attention of the world. COVID is very contagious and presents itself differently in patients, this made treating it very hard in the beginning. Not being aware of symptoms and not being able to identify whether a patient was a higher risk than others resulted in misclassification of a patient's potential needs. The virus has been present for almost a year and the world has been in a state of a pandemic for nine months, while deaths have significantly decreased when compared to earlier months, there are still cases of patients dying. Thus, being able to predict a patient's probability of surviving COVID can highlight where assets should be relocated.
+
+Multiple Logistic Regression allows us to create a model the will give the probability of a dependent variable occurring, given the conditions of the independent variables that correlate with it. In this case, we are predicting the probability of a patient living after COVID. The model will be trained on the 37151 COVID cases in Toronto that have been closed, the outcomes being Resolved, the patient lived, or fatal. The model will depend on variables such as the patient's age, and gender. This model will depend on multiple variables and will be tuned based on its AIC. The AIC is a criterion used in statistics to determine the best model for the given data. Models with too many predictor variables tend to over-fit the data, the model should be parsimonious, simple, and informative. AIC allows us to control this by keeping variables with the lower AIC and maintaining a high maximum likelihood estimate, which tells us how well the model can reproduce the data. To analyze the AIC of the model backward step-wise regression will be applied to the original model, with all variables, to locate different models. The model with the lowest AIC will be used to predict the outcomes of the 5129 pending cases. 
+
+In Methodology, the original data with the 37151 closed cases will be used to train the model that will predict the outcome of the 5129 pending cases. The process used to achieve the final model, backward stepwise regression with AIC and BIC, alongside the model itself is described. Then in the Results section, the log-odds and probabilities that the model computes for the remaining cases are displayed and explained. Lastly in the Discussion section, the results are summarized and the next steps for the model are provided. 
+
+
+## Methodology:
+
+
+**Data:**
+
+```{r, echo=FALSE,include=FALSE}
+setwd("~/Documents/STA304/Final Project")
+final<-read.csv("COVID19 cases.csv")
+final_clean<- final%>%
+  select(Assigned_ID, Outbreak.Associated, Age.Group, Source.of.Infection, Classification, Episode.Date, Reported.Date, Client.Gender, Outcome, Ever.in.ICU,Ever.Intubated,Ever.Hospitalized)
+skim(final_clean)
+
+
+
+
+
+sum(final_clean$Outcome=="RESOLVED")
+sum(final_clean$Outcome=="FATAL")
+sum(final_clean$Outcome=="ACTIVE")
+
+#Creates the variable that is the difference between the dates
+diff_dates<-c()
+i=1
+while(i < (length(final_clean$Episode.Date)+1)){
+ diff_dates<- c(diff_dates, as.Date(final_clean$Reported.Date[i])-as.Date(final_clean$Episode.Date[i]))
+ i=i+1
+}
+
+final_clean$diff_dates<-diff_dates
+
+final_clean_all<- final_clean%>%
+  select(Assigned_ID, Outbreak.Associated, Age.Group, Source.of.Infection, Classification, diff_dates, Client.Gender, Outcome, Ever.in.ICU,Ever.Intubated,Ever.Hospitalized)
+
+model_data<-final_clean_all%>%
+  subset(final_clean$Outcome!="ACTIVE")
+
+
+
+test_data<-final_clean_all%>%
+  subset(final_clean$Outcome=="ACTIVE")
+
+
+sum(final_clean$Outcome=="RESOLVED")/(length(final_clean$Outcome)-sum(final_clean$Outcome=="ACTIVE"))
+sum(final_clean$Outcome=="FATAL")/(length(final_clean$Outcome)-sum(final_clean$Outcome=="ACTIVE"))
+"Variables"<-c("X_id", "Assigned_ID", "Outbreak.Associated", "Age.Group", "Neighbourhood.Name", "FSA", "Source.of.Infection", "Classification", "Episode.Date", "Reported.Date", "Client.Gender", "Outcome", "Currently.Hospitalized", "Currently.in.ICU", "Currently.Intubated", "Ever.Hospitalized", "Ever.in.ICU", "Ever.Intubated")
+"First Observation"<-c("484597",	"1",	"Sporadic",	"50 to 59 Years",	"Willowdale East",	"M2N",	"Travel", "CONFIRMED",	"2020-01-22",	"2020-01-23",	"FEMALE",	"RESOLVED",	"No",	"No","No",	"No",	"No",	"No"	)
+
+"Second Observation"<-c("484598",	"2","Sporadic",	"50 to 59 Years",	"Willowdale East",	"M2N",	"Travel","CONFIRMED",	"2020-01-21",	"2020-01-23",	"MALE",	"RESOLVED",	"No",	"No","No",	"Yes",	"No",	"No")
+```
+
+The data used for this analysis was gathered from the Toronto Open Data website on COVID cases in Toronto from January to December. the data is collected from a combination of sources, including the provincial communicable disease reporting system (iPHIS) and Toronto's custom COVID-19 case management system (CORES). The target population of the data are all COVID patients, the frame population are COVID patients in Toronto, and the sample is collected from patients that have reported their case. Very few cases in the data have missing observations, the few that are missing are removed. Overall this data set is very thorough accounting for many factors of a patient and most observations have no missing elements. While the data set is strong some variables recorded are not very useful overall such as Neighborhood Name that is removed before analysis. The data includes variables such as Assigned_ID, to track specific cases, Age.Group, that is later manipulated to highlight cases in older age groups, Source.of.Infection, whether it is from an Outbreak or hospital and other sources, Gender, Male or Female or Other, Outcome, Resolved or Fatal or Active, and more that can be seen in Table 1 below. Of the original 18 variables, 9 are used in the first model created to predict the variable Outcome. Those variables are Age.Group, Source.of.Infection, Classification, Episode.Data, Reported.Date, Client.Gender, Ever.in.ICU, Ever.Intubated, and Ever.Hospitalized. diff_dates is a variable that is created from Episode.Date and Reported.Data is the difference between the two dates. 
+
+The variables not included in the model development are X_id, Assigned_ID, Neighborhood.Name since it did not seem relevant to the Outcome of the patient. The FSA variable was another sorting variable that accounted for the postal code of the patient's home. Lastly, whether the patient was Currently.Hospitalized, Currently.in.ICU, and Currently.Intubated since the goal of the model is to account for the patient's Outcome the variables Ever.in.ICU, Ever.Intubated, and Ever.Hospitalized are included instead.
+
+
+```{r,echo=FALSE}
+"Table 1"<-tibble(`Variables`, `First Observation`, `Second Observation`) #Creates a table displaying the first couple observations in dataset.
+kable(`Table 1`, align = "lcc", caption = "First two observations in data")
+```
+
+
+```{r,echo=FALSE}
+final_clean_all%>%
+  ggplot(aes(x=Outcome, fill=Outcome)) +
+  geom_bar()+
+  theme_classic()+
+  labs(y="Count", title="Count of Patients in Outcome (Figure 1)")
+```
+
+The variables that are selected are based on the potential correlation with the variable Outcome to predict the patient's outcome. Firstly, Age.Group categorizes each patient as less than 19, 20 to 29 years, 30 to 39 years, up to more than 90 years. With most deaths being present in patients older than 60 we regrouped the variable with patients 59 and younger in the same category, the remaining categories are left untouched, and the 34 observations with blank results are removed. Source.of.Infection indicates where the patient most likely came into contact with COVID such as from and Outbreak or travel. We grouped Unknown/Missing, Pending, and Travel sources of infection due to the lack of presence of the categories in the data gathered. Furthermore, we used the variable Classification which differentiated whether the case was CONFIRMED or PROBABLE. Also, diff_dates replaces Episode.Date and Reported.Date, it represents the number of days that passed from where the patient got infected and when they reported to the government. Higher days are expected to have less severe cases since the patients did not feel symptomatic or obligated to go to the hospital. We will also incorporate the patient's gender, which originally was categorized as FEMALE, MALE, OTHER, TRANSGENDER, and UNKOWN. Since TRANSGENDER, OTHER, and UNKNOWN reported very low numbers, 343 collectively, they were grouped as one category OTHER. Finally, we included whether a patient was Ever.Hospitalized, Ever.in.ICU, or Ever.Intubated. This can indicate the severity of the case. These variables are expected to influence the Outcome, the dependent variable in the model, of the patients. The count of patients in each category of Outcome can be seen above in Figure 1. It should be noted that Resolved heavily dominates the data, only 4% of closed cases were FATAL.
+
+
+**Model:**
+
+```{r, echo=FALSE}
+
+#Group some age groups
+
+model_data$Age.Group<-recode(model_data$Age.Group, "19 and younger"="59 and younger")
+model_data$Age.Group<-recode(model_data$Age.Group, "20 to 29 Years"="59 and younger")
+model_data$Age.Group<-recode(model_data$Age.Group, "30 to 39 Years"="59 and younger")
+model_data$Age.Group<-recode(model_data$Age.Group, "40 to 49 Years"="59 and younger")
+model_data$Age.Group<-recode(model_data$Age.Group, "50 to 59 Years"="59 and younger")
+
+#Removes the blanks 
+model_data<-model_data%>%
+  filter(Age.Group=="59 and younger" | Age.Group=="60 to 69 Years" | Age.Group=="70 to 79 Years" | Age.Group=="80 to 89 Years"| Age.Group=="90 and older" )
+
+model_data$Client.Gender<-recode(model_data$Client.Gender, "TRANSGENDER"="OTHER")
+model_data$Client.Gender<-recode(model_data$Client.Gender, "UNKNOWN"="OTHER")
+
+model_data$Source.of.Infection<-recode(model_data$Source.of.Infection, "Unknown/Missing"="Unknown/Missing/Travel")
+model_data$Source.of.Infection<-recode(model_data$Source.of.Infection, "Pending"="Unknown/Missing/Travel")
+model_data$Source.of.Infection<-recode(model_data$Source.of.Infection, "Travel"="Unknown/Missing/Travel")
+
+
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+
+
+model_all<-glm(as.factor(Outcome)~as.factor(Age.Group)+as.factor(Source.of.Infection)+as.factor(Classification)+diff_dates+as.factor(Client.Gender)+as.factor(Ever.in.ICU)+as.factor(Ever.Intubated)+as.factor(Ever.Hospitalized), data=model_data,family = "binomial")
+summary(model_all)
+
+```
+
+
+After selecting the variables that would initially be included in the model an initial Multiple Logistic Regression model was computed with all the variables present. The model can be seen below (Model 1). $\hat{p}$ in the model represents the chance of a patient being alive after COVID. Each $\beta$ indicates the log odds and slope coefficient. The intercept of the model, $\beta_0$, indicates the log odds of a patient that is 59 or under, was infected from close contact, classified as CONFIRMED, has a difference of dates of zero, is FEMALE, was never in the ICU, Intubated, or Hospitalized. Furthermore, $\beta_1$ is the slope of the predictor of the age predictor for patients who are 60 to 69 years old. $\beta_2$ is the slope of the predictor of the age predictor for patients who are 70 to 79 years old. $\beta_3$ is the slope of the predictor of the age predictor for patients who are 80 to 89 years old. $\beta_4$ is the slope of the predictor of the age predictor for patients who are 90 years or older. $\beta_5$, $\beta_6$, $\beta_7$, $\beta_8$, and $\beta_9$ represent the slope coefficients for the Source of Infection variable. Respectively, they represent the slope coefficient for Community, Healthcare, Institutional, N/A - Outbreak Associated, and Unkown/Missing, Travel. $beta_{10}$ is the slope coefficient if the patient was classified as PROBABLE. $\beta_{11}$ is the slope coefficient for the variable diff_dates, for each one-unit change in diff dates the log odds are affected by -0.001684 units. $\beta_12$ and $\beta_13$ are for the variable Client.Gender, MALE for the former and OTHER for the latter. $\beta_{14}$, $\beta_{15}$, and $\beta_{16}$ are for the last three variables Ever.in.ICU, Ever.Intubated, and Ever.Hospitalized. If a patient was ever in the ICU, Intubated, or Hospitalized the intercept changes with respect to their slope coefficient. Lastly, $\epsilon$ represents the error term in the function. 
+
+$$\begin{aligned}
+ log(\frac{\hat{p}}{1-\hat{p}}) = 7.512917-2.306783  x_{age 60-69}-3.529714 x_{age70-79}-4.170225 x_{age80-89}-4.723182 x_{age90+}\\-0.246571 x_{SOIcommunity}-0.745137 x_{SOIhealthcare}-0.919889 x_{SOIinstitutional}-1.782164 x_{SOIoutbreak}\\+0.172207 x_{SOIumt}-0.767192 x_{CLASSIFICATIONprobable}-0.001684 x_{dates}-0.488358 x_{GENDERmale}\\-0.274357 x_{GENDERother}-1.568365 x_{ICU}-1.464162 x_{Intubated}-1.573555 x_{Hospitalized} + \epsilon
+ \end{aligned}$$
+**Model 1: All variables are included in this model.**
+
+```{r, echo=FALSE, include=FALSE}
+
+back_aic<-step(model_all, direction = "backward")
+final_aic<-glm(as.factor(Outcome) ~ as.factor(Age.Group) + as.factor(Source.of.Infection) + as.factor(Classification) + as.factor(Client.Gender) + as.factor(Ever.in.ICU) + as.factor(Ever.Intubated) + as.factor(Ever.Hospitalized), data = model_data, family = "binomial")
+summary(final_aic)
+
+```
+
+After running backward step-wise regression with AIC and BIC. Running the regression with AIC and then BIC presented more variations of the model since BIC is similar to AIC but tends to set stricter guidelines for the variables resulting in fewer variables in the model. The model run with AIC, Model 2 seen below, had the lowest AIC of the three models. The model has similar coefficient estimates for the variables present in Model 1, and the variable diff_dates was removed from the model. $beta_0$ represents the same thing but no longer taking into account the diff_dates variable. $\beta_1$ to $\beta_{10}$ represent the same thing as the original model. $\beta_{11}$ and $\beta_{12}$ now are the slope coefficients for Client.Gender, with 11 for MALE and 12 for OTHER. $\beta_{13}$, $\beta_{14}$, and $\beta_{15}$ are for the last three variables Ever.in.ICU, Ever.Intubated, and Ever.Hospitalized. Lastly, $\epsilon$ represents the error term in the function. This model is used for the analysis of the remaining data. The remaining data from the original data set had 5129 cases that were still open, 2 had missing observations and were removed, and the remaining were used to test the model. The cases were plugged into the model, Model 2, and the probability each case has of being alive after COVID was computed.
+
+
+$$\begin{aligned}
+log(\frac{\hat{p}}{1-\hat{p}}) = 7.50265-2.30716  x_{age 60-69}-3.52851 x_{age70-79}-4.16966 x_{age80-89}-4.72214 x_{age90+}\\-0.24687 x_{SOIcommunity}-0.74540 x_{SOIhealthcare}-0.91787 x_{SOIinstitutional}-1.77865 x_{SOIoutbreak}\\+0.17336 x_{SOIumt}-0.78075 x_{CLASSIFICATIONprobable}-0.48797 x_{GENDERmale}\\-0.27422 x_{GENDERother}-1.56860 x_{ICU}-1.46533 x_{Intubated}-1.57413 x_{Hospitalized} + \epsilon
+\end{aligned}$$
+**Model 2: Backwards Step-wise Regression with AIC**
+
+```{r,echo=FALSE,include=FALSE}
+
+back_bic<-step(model_all, direction = "backward", k=log(37151))
+final_bic<-glm(as.factor(Outcome) ~ as.factor(Age.Group) + as.factor(Source.of.Infection) + 
+    as.factor(Client.Gender) + as.factor(Ever.in.ICU) + as.factor(Ever.Intubated) + 
+    as.factor(Ever.Hospitalized), data=model_data, family="binomial")
+summary(final_bic)
+
+```
+
+# Results
+
+The first model calculated is Model 1 seen above, this model included all variables originally chosen with the intent that they could influence the outcome of the patient. The table below (Table 2) displays the model's Coefficient estimates and corresponding p-values.
+
+```{r, echo=FALSE}
+
+"Coefficients in Model 1"<-c("Intercept", "Age.Group 60-69", "Age.Group 70-79","Age.Group 80-89","Age.Group 90+", "Source.of.Infection Community","Source.of.Infection Healthcare","Source.of.Infection Institutional", "Source.of.Infection N/A-Outbreak", "Source.of.Infection U/M/T", "Classification probable", "diff_dates", "Client.Gender MALE", "Client.Gender OTHER", "Ever.Hospitalized Yes", "Ever.in.ICU Yes", "Ever.Intubated Yes")
+
+"Estimates in Model 1"<-c("7.512917","-2.306783","-3.529714","-4.170225" ,"-4.723182","-0.246571" ,"-0.745137","-0.919889" ,"-1.782164" ,"0.172207" ,"-0.767192" ,"-0.001684" ,"-0.488358" ,"-0.274357" ,"-1.568365" ,"-1.464162", "-1.573555" )
+
+"P-values in Model 1"<-c("< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","0.19427","0.00017","0.00199","< 2e-16 ","0.32778","0.00392","0.67072","1.95e-13", "0.25706", "1.64e-14", "2.68e-10", "< 2e-16")
+
+"Table 2"<-tibble(`Coefficients in Model 1`, `Estimates in Model 1`, `P-values in Model 1`) #Creates a table displaying the first couple observations in dataset.
+kable(`Table 2`, align ="lcc",caption="Summary output for Model 1 (All variables)")
+
+```
+
+
+The second model calculated, Model 2, seen above is the outcome of the backwards step-wise regression run with AIC on the original model. This method analyzes the model and removes variables that are insignificant with respect to the dependent variable and produces a model with the lower AIC while simultaneously considering the predictive capabilities of the model. Table 3 below displays the estimated coefficients and p-values.
+
+
+```{r, echo=FALSE}
+
+"Coefficients in Model 2"<-c("Intercept", "Age.Group 60-69", "Age.Group 70-79","Age.Group 80-89","Age.Group 90+", "Source.of.Infection Community","Source.of.Infection Healthcare","Source.of.Infection Institutional", "Source.of.Infection N/A-Outbreak", "Source.of.Infection U/M/T", "Classification probable", "Client.Gender MALE", "Client.Gender OTHER", "Ever.Hospitalized Yes", "Ever.in.ICU Yes", "Ever.Intubated Yes")
+
+"Estimate in Model 2"<-c("7.50265","-2.30716","-3.52851","-4.16966" ,"-4.72214","-0.24687" ,"-0.74540","-0.91787" ,"-1.77865" ,"0.17336", "-0.78075" ,"-0.48797" ,"-0.27422" ,"-1.56860" ,"-1.46533" ,"-1.57413")
+
+"P-values in Model 2"<-c("< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","0.193676","0.000169","0.002023", "< 2e-16", "0.324543","0.003044","2.02e-13","0.257291", "1.64e-14", "2.61e-10", "< 2e-16")
+
+"Table 3"<-tibble(`Coefficients in Model 2`, `Estimate in Model 2`, `P-values in Model 2`) #Creates a table displaying the first couple observations in dataset.
+kable(`Table 3`, align ="lcc", caption="Summary output for Model 2, AIC (Final) Model")
+
+
+
+```
+
+
+The last model calculated is Model 3, seen below. This model is the result of a backwards step-wise regression with BIC run on Model 1. Models run with BIC tend to have fewer variables since there are stricter restrictions placed on the variables. This method also aims to remove insignificant predictors as well as decreasing AIC. Table 4 depicts the coefficient estimates and p-values of Model 3.
+
+
+$$\begin{aligned}
+log(\frac{\hat{p}}{1-\hat{p}}) = 7.42603-2.29069  x_{age 60-69}-3.51038 x_{age70-79}-4.14952 x_{age80-89}\\-4.69683 x_{age90+}-0.20586 x_{SOIcommunity}-0.71082 x_{SOIhealthcare}-0.90226 x_{SOIinstitutional}\\-1.73090 x_{SOIoutbreak}+0.20971 x_{SOIumt}-0.48911 x_{GENDERmale}-0.26981 x_{GENDERother}\\-1.55611 x_{ICU}-1.46250 x_{Intubated}-1.56300 x_{Hospitalized} + \epsilon
+\end{aligned}$$
+**Model 3: Backwards Step-wise Regression with BIC**
+
+```{r, echo=FALSE}
+
+"Coefficients in Model 3"<-c("Intercept", "Age.Group 60-69", "Age.Group 70-79","Age.Group 80-89","Age.Group 90+", "Source.of.Infection Community","Source.of.Infection Healthcare","Source.of.Infection Institutional", "Source.of.Infection N/A-Outbreak", "Source.of.Infection U/M/T",  "Client.Gender MALE", "Client.Gender OTHER", "Ever.Hospitalized Yes", "Ever.in.ICU Yes", "Ever.Intubated Yes")
+
+"Estimate in Model 3"<-c("7.42603","-2.29069","-3.51038","-4.14952" ,"-4.69683","-0.20586" ,"-0.71082","-0.90226" ,"-1.73090" ,"0.20971", "-0.48911" ,"-0.26981" ,"-1.55611" ,"-1.46250" ,"-1.56300")
+
+"P-values in Model 3"<-c("< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","< 2e-16 ","0.276671","0.000325","0.002466", "< 2e-16", "0.231651","1.72e-13","0.265012", "2.43e-14", "2.71e-10", "< 2e-16")
+
+"Table 4"<-tibble(`Coefficients in Model 3`, `Estimate in Model 3`, `P-values in Model 3`) #Creates a table displaying the first couple observations in dataset.
+kable(`Table 4`, align ="lcc", caption="Summary output for Model 3, BIC Model")
+
+
+```
+
+
+From the three models, their AICs were compared and Model 2 had the lowest AIC since lower AIC indicates better models, this is presented in Table 5 below. Model 2 is used to calculate each patient's log odds and the probability of survival. The model takes into account the patient's age group, source of infection, classification, gender, and whether they have ever been hospitalized, in the ICU, or Intubated.
+
+```{r, echo=FALSE}
+
+"Models"<-c("Model 1", "Model 2", "Model 3")
+"AIC"<-c(6857.5, 6855.6, 6861.4)
+
+"Table 5"<-tibble(`Models`, `AIC`)
+kable(`Table 5`, align ="lcc",caption = "Models' AIC")
+
+```
+
+
+The distribution of the log odds is presented in Figure 3 below. From the graph, it can be noted that most patients presented high log odds. This indicates that the model predicts most patients have higher chances of surviving.
+
+```{r, echo=FALSE}
+
+test_data<-test_data%>%
+  select( Age.Group, Source.of.Infection, Classification, Client.Gender, Ever.in.ICU, Ever.Intubated, Ever.Hospitalized)
+
+
+
+test_data$Age.Group<-recode(test_data$Age.Group, "19 and younger"="59 and younger")
+test_data$Age.Group<-recode(test_data$Age.Group, "20 to 29 Years"="59 and younger")
+test_data$Age.Group<-recode(test_data$Age.Group, "30 to 39 Years"="59 and younger")
+test_data$Age.Group<-recode(test_data$Age.Group, "40 to 49 Years"="59 and younger")
+test_data$Age.Group<-recode(test_data$Age.Group, "50 to 59 Years"="59 and younger")
+#Removes the blanks 
+test_data<-test_data%>%
+  filter(Age.Group=="59 and younger" | Age.Group=="60 to 69 Years" | Age.Group=="70 to 79 Years" | Age.Group=="80 to 89 Years"| Age.Group=="90 and older" )
+
+
+
+test_data$Client.Gender<-recode(test_data$Client.Gender, "TRANSGENDER"="OTHER")
+test_data$Client.Gender<-recode(test_data$Client.Gender, "UNKNOWN"="OTHER")
+
+test_data$Source.of.Infection<-recode(test_data$Source.of.Infection, "Unknown/Missing"="Unknown/Missing/Travel")
+test_data$Source.of.Infection<-recode(test_data$Source.of.Infection, "Pending"="Unknown/Missing/Travel")
+test_data$Source.of.Infection<-recode(test_data$Source.of.Infection, "Travel"="Unknown/Missing/Travel")
+
+test_ID<-c()
+test_ID<-c(test_ID,test_data$Age.Group)
+
+
+
+intercept=7.50265
+lp_hat<-c()
+j=1
+while(j < (length(test_ID)+1)){
+ if (test_data[j,1]=="59 and younger"){
+   intercept=intercept}
+  else if (test_data[j,1]=="60 to 69 Years") {
+  intercept=intercept-2.30716}
+  else if (test_data[j,1]=="70 to 79 Years") {
+  intercept=intercept-3.52851}
+  else if (test_data[j,1]=="80 to 89 Years") {
+  intercept=intercept-4.16966}
+  else  {
+  intercept=intercept-4.72214}
+  
+  if(test_data[j,2]=="Close contact"){
+    intercept=intercept}
+  else if(test_data[j,2]=="Community"){
+    intercept=intercept-0.24687
+  } else if(test_data[j,2]=="Healthcare"){
+    intercept=intercept-0.74540
+  } else if(test_data[j,2]=="Institutional"){
+    intercept=intercept-0.91787
+  } else if(test_data[j,2]=="N/A - Outbreak associated"){
+    intercept=intercept-1.77865
+  } else{
+    intercept=intercept+0.17336
+  }
+    if(test_data[j,3]=="CONFIRMED"){
+      intercept=intercept
+    }
+    else{intercept=intercept-0.78075}
+      if(test_data[j,4]=="FEMALE"){
+      intercept=intercept
+      } else if(test_data[j,4]=="MALE"){
+      intercept=intercept-0.48797
+      } else {
+      intercept=intercept-0.27422
+      } 
+        if(test_data[j,5]=="No"){
+         intercept=intercept
+          }else{
+                intercept=intercept-1.56860
+              }
+          if(test_data[j,6]=="No"){
+              intercept=intercept
+                }else{
+                     intercept=intercept-1.46533
+                      }
+            if(test_data[j,7]=="No"){
+          intercept=intercept
+              }else{
+          intercept=intercept-1.57413
+          }
+  lp_hat<-c(lp_hat, intercept)
+  intercept=7.50265
+  j=j+1}
+
+```
+
+
+```{r, echo=FALSE}
+
+p_hat<-c()
+k=1
+p=1
+l=0
+r=0
+c=1
+
+while (k<length(lp_hat)+1) {
+  l=p+c*exp(lp_hat[k])
+  r=exp(lp_hat[k])
+  p=r/l
+  p_hat<-c(p_hat,p)
+  
+  k=k+1
+  p=1
+  l=0
+  r=0
+  c=1
+  
+}
+
+```
+
+
+```{r, echo=FALSE}
+ggplot()+
+  geom_histogram(aes(x=lp_hat), bins = 20, color="darkblue", fill="lightblue")+
+  theme_classic()+
+  labs(title = "Distribution of Log Odds (Figure 2)", x="Log Odds", y="Count")
+
+
+```
+
+The probability was computed from the log odds, the distribution of the number of patients in each percentile can be seen below in Table 6. From the table it should be noted that only 62 patients have less than a 50% chance of survival, that is 1.209% of the patients. In the original data set, 4% of patients died. The model predicts that around 200 patients, 4%, have an 80% chance of survival. While this model is not producing identical ratios of the original data it does not mean that it is performing poorly, and reasons for these results are explored in the Discussion below.
+
+```{r, echo=FALSE, include=FALSE}
+#Calculate the number of patients in each quantile
+sum(p_hat<=0.1)
+sum(0.1<p_hat&p_hat<0.2)
+sum(0.2<p_hat&p_hat<0.3)
+sum(0.3<p_hat&p_hat<0.4)
+sum(0.4<p_hat&p_hat<0.5)
+sum(0.5<p_hat&p_hat<0.6)
+sum(0.6<p_hat&p_hat<0.7)
+sum(0.7<p_hat&p_hat<0.8)
+sum(0.8<p_hat&p_hat<0.9)
+sum(0.9<p_hat&p_hat<=1.0)
+```
+
+```{r, echo=FALSE}
+
+"p<=0.1"<-c("4 (0.078%)")
+"0.1-0.2"<-c("6 (0.117%)")
+"0.2-0.3"<-c("9 (0.176%)")
+"0.3-0.4"<-c("25 (0.488%)")
+"0.4-0.5"<-c("18 (0.351%)")
+"0.5-0.6"<-c("20 (0.390%)")
+"0.6-0.7"<-c("26 (0.507%)")
+"0.7-0.8"<-c("82 (1.599%)")
+"0.8-0.9"<-c("124 (2.419%)")
+"0.9<p<=1.0"<-c("4813 (93.876%)")
+"Table 6"<-tibble(`p<=0.1`, `0.1-0.2`, `0.2-0.3`, `0.3-0.4`, `0.4-0.5`, `0.5-0.6`, `0.6-0.7`, `0.7-0.8`, `0.8-0.9`, `0.9<p<=1.0`)
+
+kable(`Table 6`,  caption="Represents the number of patients in each quantile for chance of living")
+
+
+```
+
+
+
+
+# Discussion
+
+**Summary:**
+
+To conclude, a few steps were taken towards predicting the outcomes of the current ACTIVE cases in the data. The goal was to predict the outcomes of the ACTIVE COVID cases in the Toronto data. To achieve this a model was calculated using the closed cases in the data. The original variables were selected based on the assumption that they could correlate towards the patient's outcome. 12 of the 18 variables were selected, two of them, Episode.Data and Reported.Data were used to calculate the difference between them and were replaced by the new variable diff_dates. With the 11 variables, the first model was computed. Then a backwards step-wise regression with AIC then with BIC were run on the model, this method results in the removal of variables. From the three models, Model 2 had the lowest AIC and no longer took diff_dates into account for the prediction of the outcome. It was used to calculate the log odds and probability of survival for the remaining patients. The model predicted that around 1.2% of the patients have less than a 50% chance of survival.  
+
+
+**Conclusions:**
+
+After analyzing the results displayed above a few summaries can be made. The final model, Model 2, that is used to predict the Outcomes of the remaining patients included the majority of its coefficient estimates that were significant, had a p-value less than 0.05. This can be seen in Table 3 above. Three coefficients had p-values larger than 0.05. This means that we cannot reject the hypothesis that the estimate is zero. Since these coefficients are categories in variables, Source.of.Infection Healthcare and Unknown/Missing/Travel, and Client.Gender OTHER, it could be because of the lack of variability in the outcomes. As can be seen from Figure 3 below both Healthcare and Unknown/Missing/Travel have very few fatal cases which can prevent the model from making more conclusive results. Since only two sub-categories of the variable were insignificant it was decided to be kept in the model to provide insight into the patient's Outcome. Furthermore, Figure 4 displays the Outcomes grouped by Gender and it can also be noted that other has very few reported cases and even less variability present. This can also factor in the estimate being classified as insignificant. But it is also kept since it is only a subcategory of the variable and the removal of the gender OTHER ignores a proportion of people that must be acknowledged. 
+
+```{r, echo=FALSE}
+ggplot(data = model_data,aes(x=Source.of.Infection, fill=Outcome))+
+  geom_bar()+
+  theme_classic()+
+  coord_flip()+
+  labs(title="Outcomes for Sources of Infection (Figure 3)",x="Source of Infection", y="Count")
+
+ggplot(data = model_data,aes(x=Client.Gender, fill=Outcome))+
+  geom_bar()+
+  theme_classic()+
+  coord_flip()+
+  labs(title="Outcomes for Client Gender (Figure 4)",x="Client Gender", y="Count")
+
+
+```
+With the insignificant estimates kept in mind, the predictions provided by the model can be classified as useful. Only three $\beta$ that are taken into account are insignificant the remaining coefficients can be classified as influencing the Outcome. If we classify that a patient with less than a 50% chance of survival has low odds of survival then only around 1% of the active cases can be classified as FATAL. This is not equal to the original 4% of fatalities found in the data but does not mean that the model is performing poorly. Many factors can influence this result including the conditions of these patients and procedures that are now in place now to treat compared to the original patients. The model can be used to analyze the conditions of patients and their chance of survival. With this model, fewer patients can be hospitalized and resources can be allocated towards more needy patients. For example Figure 5 below displays, the Outcomes grouped by age groups, and it should be noted older patients, over 80, have more fatalities when compared to other age groups. The model takes this into account by decreasing the log odds and simultaneously decreasing the chances of survival. Doctors can classify direct resources towards patients with lower chances of survival. With this model, more patients could be saved and better procedures can be placed in hospitals.
+
+```{r, echo=FALSE}
+
+ggplot(data = model_data,aes(x=Age.Group, fill=Outcome))+
+geom_bar()+
+theme_classic()+
+coord_flip()+
+labs(title="Outcomes for Age Groups (Figure 5)",x="Age Group", y="Count")
+
+```
+
+**Weakness & Next Steps:**
+
+Some issues that can be found include the lack of variability in some predictors. As mentioned above some categories have limited Outcomes that can be preventing the model from performing at its highest potential. One solution for this is data being gathered from other locations outside of Toronto to train the model. Furthermore, the data does not take into account the patients' ethnicity/background, this variable may also correlate to the outcome of the patients. Lastly, the model does not reproduce identical results when compared to the original data, this can be because hospitals are currently more prepared to deal with COVID patients compared to initial cases. Also, older patients were more susceptible to aggressive cases of COVID resulting in more deaths within that category. Yet the new cases have less elderly compared to the original data, this can be seen in Table 7  and Table 9 below. Only 5.5% of the new cases are over 90 while 10.4% of the original data were over 80. Since the virus has been around for almost a year better procedures were put in place to treat patients, this can mean that newer patients may no longer share stronger similarities with previous patients. This can mean the model will predict lower survival for some patients. This suggests that the model is updated regularly with patient outcomes to maintain stable predictor capabilities.
+
+
+```{r, echo=FALSE}
+
+"Table 7"<-tibble(count(test_data, Age.Group))
+"Table 8"<-tibble(count(model_data, Age.Group))
+
+kable(`Table 7`, col.names = c("Age Group", "Count"),caption = "Number of patients grouped by Age in new patients" )
+kable(`Table 8`, col.names = c("Age Group", "Count"),caption = "Number of patients grouped by Age in old patients" )
+
+```
+
+
+In conclusion future steps that can be taken to further enhance the predictive capabilities of the model are as follows. Expand the region of data collection, to by province rather than by city. Then analyze whether race can contribute towards outcome prediction. Furthermore, update data used to train the model at least biweekly to keep the model up to current standards. 
+
+
+
+# References
+
+Anders. (2018, December 10). How to combine values within a variable. Retrieved December 22, 2020, from https://community.rstudio.com/t/how-to-combine-values-within-a-variable/19679/9
+
+Bevans, R. (2020, March 27). Akaike Information Criterion: When &amp; How to Use It. Retrieved December 22, 2020, from https://www.scribbr.com/statistics/akaike-information-criterion/
+
+City of Toronto. (2020, December 16). COVID-19: Status of Cases in Toronto. Retrieved December 22, 2020, from https://www.toronto.ca/home/covid-19/covid-19-latest-city-of-toronto-news/covid-19-status-of-cases-in-toronto/
+
+Coronavirus Cases:. (n.d.). Retrieved December 22, 2020, from https://www.worldometers.info/coronavirus/?utm_campaign=homeAdvegas1%3F
+
+DQdlMDQdlM 8, Joshua UlrichJoshua Ulrich 159k2929 gold badges316316 silver badges394394 bronze badges, &amp; RamnathRamnath 49.8k1313 gold badges113113 silver badges147147 bronze badges. (1960, May 01). Subset a data frame using OR when the column contains a factor. Retrieved December 22, 2020, from https://stackoverflow.com/questions/5680819/subset-a-data-frame-using-or-when-the-column-contains-a-factor
+
+Ggplot2 histogram plot : Quick start guide - R software and data visualization. (n.d.). Retrieved December 22, 2020, from http://www.sthda.com/english/wiki/ggplot2-histogram-plot-quick-start-guide-r-software-and-data-visualization
+
+How to Make a Histogram with ggplot2. (n.d.). Retrieved December 22, 2020, from https://www.datacamp.com/community/tutorials/make-histogram-ggplot2
+
+Kumar, A. (2019, September 09). Learn R: How to Extract Rows and Columns From Data Frame - DZone Big Data. Retrieved December 22, 2020, from https://dzone.com/articles/learn-r-how-extract-rows
+
+Learnerlearner 67533 gold badges88 silver badges1313 bronze badges, DWinDWin 6, NoLongerRandomnoLongerRandom 25122 silver badges33 bronze badges, &amp; Dylanjmdylanjm 33422 silver badges1717 bronze badges. (1962, January 01). How to calculate goodness of fit in glm (R). Retrieved December 22, 2020, from https://stats.stackexchange.com/questions/46345/how-to-calculate-goodness-of-fit-in-glm-r
+
+Make Beautiful Tables with the Formattable Package. (2020, December 07). Retrieved December 22, 2020, from https://www.displayr.com/formattable/
+
+Open Data Dataset. (n.d.). Retrieved December 22, 2020, from https://open.toronto.ca/dataset/covid-19-cases-in-toronto/
+
+Philippe RemyPhilippe Remy 1, Konvaskonvas 12.7k22 gold badges3333 silver badges4343 bronze badges, &amp; JasonJason 1. (1963, November 01). How to add elements to a list in R (loop). Retrieved December 22, 2020, from https://stackoverflow.com/questions/26508519/how-to-add-elements-to-a-list-in-r-loop
+
+Plotting with ggplot: : Adding titles and axis names. (n.d.). Retrieved December 22, 2020, from http://environmentalcomputing.net/plotting-with-ggplot-adding-titles-and-axis-names/
+
+R for Loop (With Examples). (2018, October 08). Retrieved December 22, 2020, from https://www.datamentor.io/r-programming/for-loop/
+
+R if...else Statement (With Examples). (2018, October 08). Retrieved December 22, 2020, from https://www.datamentor.io/r-programming/if-else-statement/
+
+Robk@statmethods.net, R. (n.d.). Creating new variables. Retrieved December 22, 2020, from https://www.statmethods.net/management/variables.html
+
+Shaxi LiverShaxi Liver 2, &amp; Akrunakrun 621k2222 gold badges352352 silver badges450450 bronze badges. (1964, September 01). How to remove rows from data frame based on subset function? Retrieved December 22, 2020, from https://stackoverflow.com/questions/32011244/how-to-remove-rows-from-data-frame-based-on-subset-function
+
+Stephanie. (2020, December 14). Log Odds: Definition and Worked Statistics Problems. Retrieved December 22, 2020, from https://www.statisticshowto.com/log-odds/
+
+Subtraction of dates. (n.d.). Retrieved December 22, 2020, from https://campus.datacamp.com/courses/intermediate-r-for-finance/dates?ex=8
+
+Yihui Xie, C. (2020, November 23). R Markdown Cookbook. Retrieved December 22, 2020, from https://bookdown.org/yihui/rmarkdown-cookbook/kable.html
+
+

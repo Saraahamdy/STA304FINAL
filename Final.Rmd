@@ -46,10 +46,10 @@ In Methodology, the original data with the 37151 closed cases will be used to tr
 **Data:**
 
 ```{r, echo=FALSE,include=FALSE}
-setwd("~/Documents/STA304/Final Project")
+#setwd("~/Documents/STA304/Final Project") #Set directory to data location
 final<-read.csv("COVID19 cases.csv")
 final_clean<- final%>%
-  select(Assigned_ID, Outbreak.Associated, Age.Group, Source.of.Infection, Classification, Episode.Date, Reported.Date, Client.Gender, Outcome, Ever.in.ICU,Ever.Intubated,Ever.Hospitalized)
+  select(Assigned_ID, Outbreak.Associated, Age.Group, Source.of.Infection, Classification, Episode.Date, Reported.Date, Client.Gender, Outcome, Ever.in.ICU,Ever.Intubated,Ever.Hospitalized) #Selected variables that are deemed useful
 skim(final_clean)
 
 
@@ -68,18 +68,18 @@ while(i < (length(final_clean$Episode.Date)+1)){
  i=i+1
 }
 
-final_clean$diff_dates<-diff_dates
+final_clean$diff_dates<-diff_dates #adds diff_dates to data
 
 final_clean_all<- final_clean%>%
   select(Assigned_ID, Outbreak.Associated, Age.Group, Source.of.Infection, Classification, diff_dates, Client.Gender, Outcome, Ever.in.ICU,Ever.Intubated,Ever.Hospitalized)
 
 model_data<-final_clean_all%>%
-  subset(final_clean$Outcome!="ACTIVE")
+  subset(final_clean$Outcome!="ACTIVE") #Selects all cases that are no ACTIVE in Outcome, data used for model
 
 
 
 test_data<-final_clean_all%>%
-  subset(final_clean$Outcome=="ACTIVE")
+  subset(final_clean$Outcome=="ACTIVE") #Selects all cases that are ACTIVE, data used for testing model
 
 
 sum(final_clean$Outcome=="RESOLVED")/(length(final_clean$Outcome)-sum(final_clean$Outcome=="ACTIVE"))
@@ -156,7 +156,7 @@ $$\begin{aligned}
 **Model 1: All variables are included in this model.**
 
 ```{r, echo=FALSE, include=FALSE}
-
+#Runs a backwards step-wise regression with AIC
 back_aic<-step(model_all, direction = "backward")
 final_aic<-glm(as.factor(Outcome) ~ as.factor(Age.Group) + as.factor(Source.of.Infection) + as.factor(Classification) + as.factor(Client.Gender) + as.factor(Ever.in.ICU) + as.factor(Ever.Intubated) + as.factor(Ever.Hospitalized), data = model_data, family = "binomial")
 summary(final_aic)
@@ -172,7 +172,7 @@ log(\frac{\hat{p}}{1-\hat{p}}) = 7.50265-2.30716  x_{age 60-69}-3.52851 x_{age70
 **Model 2: Backwards Step-wise Regression with AIC**
 
 ```{r,echo=FALSE,include=FALSE}
-
+#Runs backwards step-wise regression with BIC
 back_bic<-step(model_all, direction = "backward", k=log(37151))
 final_bic<-glm(as.factor(Outcome) ~ as.factor(Age.Group) + as.factor(Source.of.Infection) + 
     as.factor(Client.Gender) + as.factor(Ever.in.ICU) + as.factor(Ever.Intubated) + 
@@ -186,7 +186,7 @@ summary(final_bic)
 The first model calculated is Model 1 seen above, this model included all variables originally chosen with the intent that they could influence the outcome of the patient. The table below (Table 2) displays the model's Coefficient estimates and corresponding p-values.
 
 ```{r, echo=FALSE}
-
+#Tables created to summarise the models
 "Coefficients in Model 1"<-c("Intercept", "Age.Group 60-69", "Age.Group 70-79","Age.Group 80-89","Age.Group 90+", "Source.of.Infection Community","Source.of.Infection Healthcare","Source.of.Infection Institutional", "Source.of.Infection N/A-Outbreak", "Source.of.Infection U/M/T", "Classification probable", "diff_dates", "Client.Gender MALE", "Client.Gender OTHER", "Ever.Hospitalized Yes", "Ever.in.ICU Yes", "Ever.Intubated Yes")
 
 "Estimates in Model 1"<-c("7.512917","-2.306783","-3.529714","-4.170225" ,"-4.723182","-0.246571" ,"-0.745137","-0.919889" ,"-1.782164" ,"0.172207" ,"-0.767192" ,"-0.001684" ,"-0.488358" ,"-0.274357" ,"-1.568365" ,"-1.464162", "-1.573555" )
@@ -285,7 +285,7 @@ test_ID<-c()
 test_ID<-c(test_ID,test_data$Age.Group)
 
 
-
+#A loop that takes each case in the testing data and runs through Model 2 to compute Log Odds
 intercept=7.50265
 lp_hat<-c()
 j=1
@@ -343,12 +343,13 @@ while(j < (length(test_ID)+1)){
   lp_hat<-c(lp_hat, intercept)
   intercept=7.50265
   j=j+1}
-
+summary(final_aic)
 ```
 
 
 ```{r, echo=FALSE}
 
+#Computes Probability from the log odds
 p_hat<-c()
 k=1
 p=1

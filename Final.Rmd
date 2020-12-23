@@ -343,7 +343,7 @@ while(j < (length(test_ID)+1)){
   lp_hat<-c(lp_hat, intercept)
   intercept=7.50265
   j=j+1}
-summary(final_aic)
+
 ```
 
 
